@@ -20,12 +20,8 @@ int write_packet_to_file(FILE *fp, struct packet *pkt)
         perror("Error writing to file");
         exit(1);
     }
-    /*
-    if (PRINT_STATEMENTS)
-    {
-        printf("Wrote %d bytes to the file \n", (int)bytes_written);
-    }
-    */
+    
+    
     return bytes_written;
 }
 
@@ -37,12 +33,7 @@ void recv_packet(struct packet *pkt, int sockfd, struct sockaddr_in *addr, sockl
         perror("Error receiving packet");
         exit(1);
     }
-    /*
-    if (PRINT_STATEMENTS)
-    {
-        printRecv(pkt);
-    }
-    */
+   
 }
 
 int handle_handshake(FILE *fp, struct packet *pkt, int sockfd, struct sockaddr_in *addr, socklen_t addr_size)
@@ -53,7 +44,7 @@ int handle_handshake(FILE *fp, struct packet *pkt, int sockfd, struct sockaddr_i
     return num_packets_expected;
 }
 
-// Our ACK messages are just the number sent and nothing else
+
 void send_ack(int acknum, int sockfd, struct sockaddr_in *addr, socklen_t addr_size)
 {
     int bytes_sent = sendto(sockfd, &acknum, sizeof(acknum), 0, (struct sockaddr *)addr, addr_size);
@@ -62,36 +53,25 @@ void send_ack(int acknum, int sockfd, struct sockaddr_in *addr, socklen_t addr_s
         perror("Error sending ACK");
         exit(1);
     }
-    /*
-    if (PRINT_STATEMENTS)
-    {
-        printf("ACK %d\n", acknum);
-    }
-    */
+  
 }
 
-// Function that appropriately buffers the packet - returns the index the packet was buffered at or -1 if packet was discarded
+// buffers the packet - returns the index the packet was buffered at or -1 if packet was discarded
 int buffer_packet(struct packet *pkt, struct packet_recv *buffer, int *expected_seq_num)
 {
     int ind = pkt->seqnum - *expected_seq_num;
     if (ind < 0)
     {
-        // If the packet is out of order, we don't want to buffer it
-        /*
-        if (PRINT_STATEMENTS)
-        {
-            printf("Out of order packet %d received, ignoring\n", pkt->seqnum);
-        }
-        */
+      
         return -1;
     }
     if (ind >= MAX_BUFFER)
     {
-        // If the packet is too far ahead, we can't buffer it
+        //too far ahead
         printf("Packet %d too far ahead, ignoring\n", pkt->seqnum);
         return -1;
     }
-    // If we already received the packet, we don't need to buffer it again
+    // if receivedf dont buffer
     if (!buffer[ind].received)
     {
         buffer[ind].pkt = *pkt;
@@ -100,7 +80,7 @@ int buffer_packet(struct packet *pkt, struct packet_recv *buffer, int *expected_
     return ind;
 }
 
-// Function that writes all sequential received packets and updates the expected sequence number/buffer appropriately
+//writes all sequential received packets and updates the expected buffer
 void save_packets(FILE *fp, struct packet_recv *buffer, int *expected_seq_num)
 {
     int ind = 0;
@@ -172,7 +152,7 @@ int main()
         return 1;
     }
 
-    // Configure the client address structure to which we will send ACKs
+    // Configure the client address structure
     memset(&client_addr_to, 0, sizeof(client_addr_to));
     client_addr_to.sin_family = AF_INET;
     client_addr_to.sin_addr.s_addr = inet_addr(LOCAL_HOST);
@@ -182,37 +162,22 @@ int main()
     FILE *fp = fopen("output.txt", "wb");
 
     // TODO: Receive file from the client and save it as output.txt
-    /*
-    Handshake: File size
-    */
-    // Ignore the first handshake to trigger a timeout
-    /*
-    if (PRINT_STATEMENTS)
-    {
-        printf("Waiting for handshake\n");
-    }
-    */
+   
     int num_packets = handle_handshake(fp, &pkt, listen_sockfd, &client_addr_from, addr_size);
     send_ack(expected_seq_num, send_sockfd, &client_addr_to, addr_size);
-    /*
-    if (PRINT_STATEMENTS)
-    {
-        printf("Handshake received: %d packets expected\n", num_packets);
-    }
-    */
+   
     // Dealing with repeated handshake messages
     while (pkt.seqnum == num_packets)
     {
-        // We receive any number of repeat handshake messages
+       
         recv_packet(&pkt, listen_sockfd, &client_addr_from, addr_size);
         send_ack(expected_seq_num, send_sockfd, &client_addr_to, addr_size);
     }
-    // Once expected_seq_num reaches num_packets, we've received all the packets as they are 0 indexed
-    // Ex: if we have 5 packets, we expect to receive 0, 1, 2, 3, 4, so expected_seq_num will be 5 after receiving 4
+   
     while (expected_seq_num < num_packets)
     {
         recv_packet(&pkt, listen_sockfd, &client_addr_from, addr_size);
-        // We receive any number of repeat handshake messages
+      
         buffered_ind = buffer_packet(&pkt, buffer, &expected_seq_num);
         if (buffered_ind > -1)
         {
@@ -220,19 +185,7 @@ int main()
         }
         send_ack(expected_seq_num, send_sockfd, &client_addr_to, addr_size);
     }
-    /*
-    if (PRINT_STATEMENTS)
-    {
-        printf("File received, shutting down\n");
-    }
-    */
-    // No shutdown protocol - see https://piazza.com/class/ln0rg59p7g82fk/post/226 -> Not necessary for client to shutdown
-    /* Upon receiving a packet:
-    Read the header
-    If the sequence number is the next expected sequence number, ACK it
-    If the sequence number is out of order buffer it and ACK the last in sequence packet
-    If the sequence number is the last packet, ACK it and close the file
-     */
+   
     fclose(fp);
     close(listen_sockfd);
     close(send_sockfd);

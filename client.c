@@ -24,24 +24,13 @@ void serve_packet(struct packet *pkt, int sockfd, struct sockaddr_in *addr, sock
         perror("Error sending packet");
         exit(1);
     }
-    /*
-    if (PRINT_STATEMENTS)
-    {
-        printSend(pkt, 0);
-    }
-    */
 }
 
 void send_handshake(int file_size, struct packet *pkt, int sockfd, struct sockaddr_in *addr, socklen_t addr_size)
 {
     // Setting the sequence number to the file size
     pkt->seqnum = file_size;
-    /*
-    if (PRINT_STATEMENTS)
-    {
-        printf("Sending handshake: ");
-    }
-    */
+ 
     serve_packet(pkt, sockfd, addr, addr_size);
 }
 
@@ -62,13 +51,6 @@ int recv_ack(int sockfd, struct sockaddr_in *addr, socklen_t addr_size)
     {
         if (errno == EWOULDBLOCK || errno == EAGAIN)
         {
-            // Timeout reached, return -2 to deal with it in the main
-            /*
-            if (PRINT_STATEMENTS)
-            {
-                printf("Timeout reached. No message received.\n");
-            }
-            */
             return -2;
         }
         else
@@ -77,12 +59,7 @@ int recv_ack(int sockfd, struct sockaddr_in *addr, socklen_t addr_size)
             return -1;
         }
     }
-    /*
-    if (PRINT_STATEMENTS)
-    {
-        printf("ACK %d\n", acknum);
-    }
-    */
+   
     return (int)acknum;
 }
 
@@ -134,12 +111,7 @@ int handle_ack(struct sent_packet *buffer, int old_ack, int new_ack)
     }
     if (num_pkt_recv <= 0)
     {
-        /*
-        if (PRINT_STATEMENTS)
-        {
-            printf("Received old ACK for %d - currently on %d\n", new_ack, old_ack);
-        }
-        */
+    
         return old_ack;
     }
     if (num_pkt_recv > MAX_BUFFER)
@@ -155,12 +127,7 @@ int handle_ack(struct sent_packet *buffer, int old_ack, int new_ack)
     {
         buffer[i].resent = 0;
     }
-    /*
-    if (PRINT_STATEMENTS)
-    {
-        printf("Moved buffer forward %d packets\n", num_pkt_recv);
-    }
-    */
+    
     return new_ack;
 }
 
@@ -298,7 +265,6 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // Configure the server address structure to which we will send data
     memset(&server_addr_to, 0, sizeof(server_addr_to));
     server_addr_to.sin_family = AF_INET;
     server_addr_to.sin_port = htons(SERVER_PORT_TO);
@@ -333,12 +299,7 @@ int main(int argc, char *argv[])
     int file_size = ftell(fp);
     int num_packets = (int)ceil((double)file_size / PAYLOAD_SIZE);
     fseek(fp, 0, SEEK_SET);
-    /*
-    if (PRINT_STATEMENTS)
-    {
-        printf("Starting to send file: %s, which has size %d (%d packets)\n", filename, file_size, num_packets);
-    }
-    */
+  
     read_file_and_create_packet(fp, &pkt, 0);
 
     // Send handshake
@@ -355,13 +316,7 @@ int main(int argc, char *argv[])
         // printPacket(&pkt);
         ack_num = recv_ack(listen_sockfd, &server_addr_from, addr_size);
     }
-    /*
-    if (PRINT_STATEMENTS)
-    {
-        printf("Handshake Received\n");
-    }
-    */
-    // Changed the following <= to < for correct client shutdown if the server's final ACK is not lost
+
     while (ack_num < num_packets)
     {
         // Additive increase
@@ -380,20 +335,11 @@ int main(int argc, char *argv[])
 
         if (new_ack == -1)
         {
-            // Treat the case in which recvfrom has failed - just exit for now
             exit(1);
         }
         else if (new_ack == -2)
         {
-            // Treat the case in which recvfrom has timed out
-            // Right now there are 4 flying packets, so the timeout is for the first packet in the
-            // buffer. Resend this packet
-            /*
-            if (PRINT_STATEMENTS)
-            {
-                printf("There has been a timeout, resending packet number %d\n", ack_num);
-            }
-            */
+            
             resend_packet(buffer, ack_num, ack_num, send_sockfd, &server_addr_to, addr_size);
             ssthresh = fmax((int)cwnd / 2, 2);
             cwnd = INITIAL_WINDOW;
@@ -407,12 +353,7 @@ int main(int argc, char *argv[])
                 // Fast retransmit
                 if (num_times_ack_repeated == 3)
                 {
-                    /*
-                    if (PRINT_STATEMENTS)
-                    {
-                        printf("Multiple ACKs for %d detected - beginning fast retransmit", ack_num);
-                    }
-                    */
+                
                     resend_packet(buffer, ack_num, ack_num, send_sockfd, &server_addr_to, addr_size);
                     cwnd /= 2;
                     last_ack_cwnd_change = ack_num;
@@ -433,49 +374,9 @@ int main(int argc, char *argv[])
             ack_num = handle_ack(buffer, ack_num, new_ack);
         }
 
-        // while (new_ack != seq_num)
-        // {
-        //     // Resend packet
-        //     resend_packet(buffer, &ack_num, &ack_num, send_sockfd, &server_addr_to, addr_size);
-        //     // Receive ack
-        //     new_ack = recv_ack(listen_sockfd, &server_addr_from, addr_size);
-        // }
+       
     }
-    /*
-    if (PRINT_STATEMENTS)
-    {
-        printf("File sent\n");
-    }
-    */
-
-    /*
-Handshake format:
-1. 4 bytes for file size
-2. 2 bytes for packet length
-That leaves 1194 bytes for the payload
-This is just the normal packet format, but instead of the sequence number, we have the file size
-*/
-    /* We need to read in the file
-    As we read it in, we need to create a header formatted as follows:
-    1. 4 bytes for the sequence number
-    2. 2 bytes for packet length
-    That leaves 1194 bytes for the payload
-    Then we need to send the packet to the server
-    Set a timeout timer
-    If the ack is received, we terminate
-    If we timeout, we resend
-    */
-
-    /*
-    Roadmap:
-    Send one packet to the server
-    Ack that packet
-    Send entire file and ack (one packet at a time)
-    Send multiple packets at a time and ack (using fixed timeout and fixed window size)
-    Send multiple packets at a time and ack (using variable window size)
-    Tuning the system to get best efficiency
-    */
-
+  
     fclose(fp);
     close(listen_sockfd);
     close(send_sockfd);
