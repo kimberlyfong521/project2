@@ -162,30 +162,41 @@ int main()
     FILE *fp = fopen("output.txt", "wb");
 
     // TODO: Receive file from the client and save it as output.txt
-   
+   // Handles the handshake process and returns the number of packets
     int num_packets = handle_handshake(fp, &pkt, listen_sockfd, &client_addr_from, addr_size);
+
+    // Sends an acknowledgment for the expected sequence number
     send_ack(expected_seq_num, send_sockfd, &client_addr_to, addr_size);
-   
-    // Dealing with repeated handshake messages
+
+    // Loop to handle repeated handshake messages
     while (pkt.seqnum == num_packets)
     {
-       
+        // Receive the packet from the client
         recv_packet(&pkt, listen_sockfd, &client_addr_from, addr_size);
+        
+        // Send an acknowledgment for the expected sequence number
         send_ack(expected_seq_num, send_sockfd, &client_addr_to, addr_size);
     }
-   
+
+    // Loop to receive packets until all expected packets are received
     while (expected_seq_num < num_packets)
     {
+        // Receive the packet from the client
         recv_packet(&pkt, listen_sockfd, &client_addr_from, addr_size);
-      
+
+        // Buffer the packet and get the index where it was buffered
         buffered_ind = buffer_packet(&pkt, buffer, &expected_seq_num);
+        
+        // If the packet was successfully buffered, save it
         if (buffered_ind > -1)
         {
             save_packets(fp, buffer, &expected_seq_num);
         }
+
+        // Send an acknowledgment for the expected sequence number
         send_ack(expected_seq_num, send_sockfd, &client_addr_to, addr_size);
     }
-   
+
     fclose(fp);
     close(listen_sockfd);
     close(send_sockfd);
