@@ -162,6 +162,7 @@ int main()
     FILE *fp = fopen("output.txt", "wb");
 
     // TODO: Receive file from the client and save it as output.txt
+    
    // Handles the handshake process and returns the number of packets
     int num_packets = handle_handshake(fp, &pkt, listen_sockfd, &client_addr_from, addr_size);
 
