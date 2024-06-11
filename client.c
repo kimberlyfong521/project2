@@ -294,79 +294,84 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-        
     // Get file size
-    fseek(fp, 0, SEEK_END); // Move to the end of the file
-    int file_size = ftell(fp); // Get the file size
-    int num_packets = (int)ceil((double)file_size / PAYLOAD_SIZE); // Calculate the number of packets
-    fseek(fp, 0, SEEK_SET); // Move back to the start of the file
-
-    read_file_and_create_packet(fp, &pkt, 0); // Create the initial packet
+    fseek(fp, 0, SEEK_END);
+    int file_size = ftell(fp);
+    int num_packets = (int)ceil((double)file_size / PAYLOAD_SIZE);
+    fseek(fp, 0, SEEK_SET);
+  
+    read_file_and_create_packet(fp, &pkt, 0);
 
     // Send handshake
-    send_handshake(num_packets, &pkt, send_sockfd, &server_addr_to, addr_size); // Send handshake packet
-    set_socket_timeout(listen_sockfd, timeout); // Set socket timeout
+    send_handshake(num_packets, &pkt, send_sockfd, &server_addr_to, addr_size);
+    // printPacket(&pkt);
+    set_socket_timeout(listen_sockfd, timeout);
 
-    ack_num = recv_ack(listen_sockfd, &server_addr_from, addr_size); // Receive acknowledgment
+    ack_num = recv_ack(listen_sockfd, &server_addr_from, addr_size);
 
-    while (ack_num != 1) // Resend handshake until acknowledged
+    while (ack_num != 1)
     {
+        // Send handshake
         send_handshake(num_packets, &pkt, send_sockfd, &server_addr_to, addr_size);
+        // printPacket(&pkt);
         ack_num = recv_ack(listen_sockfd, &server_addr_from, addr_size);
     }
 
-    while (ack_num < num_packets) // Send packets until all are acknowledged
+    while (ack_num < num_packets)
     {
-        // Additive increase: increase congestion window (cwnd)
+        // Additive increase
         if ((ack_num - last_ack_cwnd_change >= cwnd) || (cwnd <= ssthresh))
         {
             cwnd++;
             last_ack_cwnd_change = ack_num;
         }
-
-        // Limit congestion window size
+        // Making sure that the cwnd doesn't grow too big
         cwnd = fmin(cwnd, num_packets - seq_num);
         cwnd = fmin(cwnd, MAX_BUFFER);
+        send_unsent_packets(cwnd, &seq_num, ack_num, fp, &pkt, buffer, send_sockfd, &server_addr_to, addr_size);
 
-        send_unsent_packets(cwnd, &seq_num, ack_num, fp, &pkt, buffer, send_sockfd, &server_addr_to, addr_size); // Send unsent packets
+        // Receive ack
+        new_ack = recv_ack(listen_sockfd, &server_addr_from, addr_size);
 
-        new_ack = recv_ack(listen_sockfd, &server_addr_from, addr_size); // Receive acknowledgment
-
-        if (new_ack == -1) // Exit on error
+        if (new_ack == -1)
         {
             exit(1);
         }
-        else if (new_ack == -2) // Handle timeout
+        else if (new_ack == -2)
         {
-            resend_packet(buffer, ack_num, ack_num, send_sockfd, &server_addr_to, addr_size); // Resend packet
-            ssthresh = fmax((int)cwnd / 2, 2); // Update slow start threshold
-            cwnd = INITIAL_WINDOW; // Reset congestion window
+            
+            resend_packet(buffer, ack_num, ack_num, send_sockfd, &server_addr_to, addr_size);
+            ssthresh = fmax((int)cwnd / 2, 2);
+            cwnd = INITIAL_WINDOW;
             last_ack_cwnd_change = ack_num;
         }
         else
         {
-            if (new_ack == ack_num) // Handle duplicate ACKs
+            if (new_ack == ack_num)
             {
                 num_times_ack_repeated++;
-                if (num_times_ack_repeated == 3) // Fast retransmit
+                // Fast retransmit
+                if (num_times_ack_repeated == 3)
                 {
+                
                     resend_packet(buffer, ack_num, ack_num, send_sockfd, &server_addr_to, addr_size);
-                    cwnd /= 2; // Halve the congestion window
+                    cwnd /= 2;
                     last_ack_cwnd_change = ack_num;
-                    ssthresh = fmax(cwnd, 2); // Update slow start threshold
+                    ssthresh = fmax(cwnd, 2);
                     cwnd += 3;
                 }
-                else if (num_times_ack_repeated > 3) // Fast recovery
+                // Fast recovery
+                else if (num_times_ack_repeated > 3)
                 {
                     cwnd++;
                 }
             }
             else
             {
-                num_times_ack_repeated = 0; // Reset duplicate ACK counter
+                num_times_ack_repeated = 0;
             }
-
-            ack_num = handle_ack(buffer, ack_num, new_ack); // Update ACK number and buffer
+            // Treat the case in which an ack has been received
+            ack_num = handle_ack(buffer, ack_num, new_ack);
         }
 
        
